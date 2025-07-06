@@ -1,0 +1,69 @@
+language: "cpp"
+framework: "drogon"
+test_framework: "gtest"
+
+naming:
+  test_prefix: "TEST"
+  descriptive_test_names: true
+  include_class_in_test_name: true
+
+includes:
+  - "#include <gtest/gtest.h>"
+  - "#include <cmath>"
+  - "#include <stdexcept>"
+  - '#include "example.h"'
+
+standards:
+  cpp_standard: "C++17"
+
+test_case_rules:
+  per_method: 2
+  total_tests: 4
+  include_positive_case: true
+  include_negative_case: true
+  avoid_edge_cases:
+    - "INT_MIN"
+    - "INT_MAX"
+
+assertions:
+  preferred:
+    - "EXPECT_EQ"
+  complete_braces_required: true
+
+methods_to_test:
+  source: "dynamic"
+  manual_list: []
+
+output_format:
+  file_type: ".cpp"
+  markdown_code_fences: false
+  extra_text: false
+  example_in_prompt: true
+
+llm_prompt_guidance:
+  role_description: "You are an expert C++ programmer tasked with generating unit tests using Google Test for the provided C++ code."
+  strict_formatting: true
+  example_format_included: true
+  code_to_test_in_prompt: true
+  avoid_comments_outside_code: true
+
+coverage:
+  minimum_threshold: 80.0
+  enabled: true
+
+model_config:
+  primary_model: "llama3.1:8b"
+  fallback_models:
+    - "gpt-4"
+    - "gpt-3.5-turbo"
+  max_retries: 3
+  timeout_minutes: 10
+
+paths:
+  codebase_dir: "./orgChartApi"
+  tests_dir: "./tests"
+  temp_dir: "./tmp"
+  folders_to_scan:
+    # - "controllers"
+    - "models"
+    - "utils"
