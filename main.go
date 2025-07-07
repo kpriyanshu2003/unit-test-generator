@@ -55,6 +55,7 @@ func main() {
 	}
 	log.Printf("Tests directory ready: %s", rules.Paths.TestsDir)
 
+	// Generate unit tests
 	generator := NewTestGenerator(client, rules)
 	err = generator.ProcessFiles(files)
 	if err != nil {
@@ -62,7 +63,18 @@ func main() {
 	}
 	log.Println("Unit test generation completed successfully")
 
-	// test the generated tests
+	// BUGGY Iterate through the generated tests, to improve quality and ensure they meet the rules
+	files, err = ReadCodebase(rules.Paths.TestsDir, rules.Paths.FoldersToScan)
+	if err != nil {
+		log.Fatalf("Failed to read codebase: %v", err)
+	}
+
+	validator := NewTestValidator(client, rules)
+	err = validator.ProcessFiles(files)
+	if err != nil {
+		log.Fatalf("Failed to validate tests: %v", err)
+	}
+	log.Println("Test validation completed successfully")
 }
 
 func initializeOllamaClient() (*api.Client, error) {

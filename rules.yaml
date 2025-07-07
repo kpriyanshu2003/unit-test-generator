@@ -11,10 +11,9 @@ includes:
   - "#include <gtest/gtest.h>"
   - "#include <cmath>"
   - "#include <stdexcept>"
-  - '#include "example.h"'
 
 standards:
-  cpp_standard: "C++17"
+  cpp_standard: "C++14"
 
 test_case_rules:
   per_method: 2

@@ -92,35 +92,3 @@ func ReadCodebase(dir string, toScan []string) (map[string]string, error) {
 func isCppFile(filename string) bool {
 	return strings.HasSuffix(filename, ".cpp") || strings.HasSuffix(filename, ".h")
 }
-
-// // hasCorrespondingFile checks if a C++ file has its corresponding header/source file
-// func hasCorrespondingFile(filePath string) bool {
-// 	absFilePath, err := filepath.Abs(filePath)
-// 	if err != nil {
-// 		return false
-// 	}
-
-// 	if strings.HasSuffix(filePath, ".h") {
-// 		cppFile := strings.Replace(absFilePath, ".h", ".cpp", 1)
-// 		_, err := os.Stat(cppFile)
-// 		return err == nil
-// 	} else if strings.HasSuffix(filePath, ".cpp") {
-// 		hFile := strings.Replace(absFilePath, ".cpp", ".h", 1)
-// 		_, err := os.Stat(hFile)
-// 		return err == nil
-// 	}
-
-// 	return false
-// }
-
-// // generateTestFileName generates the test file name based on the source file
-// func generateTestFileName(rules *Rules, sourceFile string) string {
-// 	baseName := filepath.Base(sourceFile)
-// 	testFile := filepath.Join(rules.Paths.TestsDir, strings.Replace(baseName, ".cpp", "_test.cpp", 1))
-
-// 	if strings.HasSuffix(baseName, ".h") {
-// 		testFile = filepath.Join(rules.Paths.TestsDir, strings.Replace(baseName, ".h", "_test.cpp", 1))
-// 	}
-
-// 	return testFile
-// }

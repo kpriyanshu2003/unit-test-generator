@@ -77,6 +77,11 @@ func (tg *TestGenerator) GenerateUnitTests(code string, extraPrompt string) (str
 	log.Printf("Generating unit tests with model %s (code length: %d bytes)",
 		tg.rules.ModelConfig.PrimaryModel, len(code))
 
+	// Extract imports from the original code
+	originalImports := tg.extractImportsFromCode(code)
+
+	fmt.Println("Original imports extracted:", originalImports)
+
 	// Get available models
 	resp, err := tg.client.List(context.Background())
 	if err != nil {
@@ -93,8 +98,8 @@ func (tg *TestGenerator) GenerateUnitTests(code string, extraPrompt string) (str
 	methods := tg.getMethodsToTest()
 	methodsList := strings.Join(methods, ", ")
 
-	// Generate prompt
-	prompt := tg.generatePrompt(code, methodsList, extraPrompt)
+	// Generate prompt with original imports
+	prompt := tg.generatePrompt(code, methodsList, extraPrompt, originalImports)
 	log.Printf("Sending API request with prompt (%d bytes)", len(prompt))
 
 	// Create base request
@@ -164,7 +169,7 @@ func (tg *TestGenerator) getMethodsToTest() []string {
 }
 
 // generatePrompt creates the prompt for the LLM with stricter output requirements
-func (tg *TestGenerator) generatePrompt(code, methodsList, extraPrompt string) string {
+func (tg *TestGenerator) generatePrompt(code, methodsList, extraPrompt string, originalImports []string) string {
 	var prompt strings.Builder
 
 	// Role description
@@ -197,9 +202,17 @@ func (tg *TestGenerator) generatePrompt(code, methodsList, extraPrompt string) s
 		prompt.WriteString("\n")
 	}
 
-	// Includes
+	// Original imports from source file
+	if len(originalImports) > 0 {
+		prompt.WriteString("- Include relevant imports such as header files from original file\n")
+		prompt.WriteString("- Additionally, include these imports from the original file: ")
+		prompt.WriteString(strings.Join(originalImports, ", "))
+		prompt.WriteString("\n")
+	}
+
+	// Additional includes from config
 	if len(tg.rules.Includes) > 0 {
-		prompt.WriteString("- Include these headers: ")
+		prompt.WriteString("- Also include these headers: ")
 		prompt.WriteString(strings.Join(tg.rules.Includes, ", "))
 		prompt.WriteString("\n")
 	}
@@ -442,6 +455,20 @@ func (tg *TestGenerator) extractCodeFromMarkdown(content string) string {
 	return result
 }
 
+func (tg *TestGenerator) extractImportsFromCode(code string) []string {
+	var imports []string
+	lines := strings.Split(code, "\n")
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#include") {
+			imports = append(imports, trimmed)
+		}
+	}
+
+	return imports
+}
+
 // generateTestFilename generates the test filename based on the source file, preserving folder structure
 func (tg *TestGenerator) generateTestFilename(sourceFile string) string {
 	// Get the relative path from the codebase directory
@@ -471,14 +498,14 @@ func (tg *TestGenerator) generateTestFilename(sourceFile string) string {
 // convertToTestFilename converts a source filename to test filename
 func (tg *TestGenerator) convertToTestFilename(filename string) string {
 	// Generate test filename
-	if strings.HasSuffix(filename, ".cpp") {
-		return strings.Replace(filename, ".cpp", "_test.cpp", 1)
+	if strings.HasSuffix(filename, ".cc") {
+		return strings.Replace(filename, ".cpp", "_test.cc", 1)
 	} else if strings.HasSuffix(filename, ".h") {
-		return strings.Replace(filename, ".h", "_test.cpp", 1)
+		return strings.Replace(filename, ".h", "_test.cc", 1)
 	}
 
 	// Default case
-	return filename + "_test.cpp"
+	return filename + "_test.cc"
 }
 
 // saveTestFile saves the generated test code to a file
