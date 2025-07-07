@@ -1,22 +1,26 @@
-# utils/CMakeLists.txt
+# models/CMakeLists.txt
 
 # Utility library
-add_library(utils
-    utils.cc
+add_library(models
+    Department.cc
+    Job.cc
+    Person.cc
+    PersonInfo.cc
+    User.cc
 )
 
-target_include_directories(utils PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(models PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-# Unit tests for utils
-add_executable(utils_tests
-    utils_test.cc
+# Unit tests for models
+add_executable(models_tests
+    models_test.cc
 )
 
-target_link_libraries(utils_tests
-    utils
+target_link_libraries(models_tests
+    models
     GTest::gtest
     GTest::gtest_main
     pthread
 )
 
-add_test(NAME utils_tests COMMAND utils_tests)
+add_test(NAME models_tests COMMAND models_tests)
