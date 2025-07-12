@@ -125,7 +125,7 @@ func (app *App) printMenu() {
 }
 
 func (app *App) generateTests() {
-	app.printInfo("🏗️  Starting test generation...")
+	app.printInfo("🏗️ Starting test generation...")
 
 	// Read codebase
 	files, err := ReadCodebase(app.rules.Paths.CodebaseDir, app.rules.Paths.FoldersToScan)
@@ -144,9 +144,15 @@ func (app *App) generateTests() {
 		app.printDebug("Tests directory ready: %s", app.rules.Paths.TestsDir)
 	}
 
+	// Copy header files to tests directory
+	app.printInfo("📄 Copying header files...")
+	if err := CopyHeaderFiles(app.rules.Paths.CodebaseDir, app.rules.Paths.TestsDir, app.rules.Paths.FoldersToScan); err != nil {
+		app.printError("Failed to copy header files: %v", err)
+		return
+	}
+
 	// Generate unit tests
 	generator := NewTestGenerator(app.client, app.rules)
-
 	startTime := time.Now()
 	err = generator.ProcessFiles(files)
 	duration := time.Since(startTime)
@@ -162,51 +168,24 @@ func (app *App) generateTests() {
 func (app *App) runTests() {
 	app.printInfo("🏃 Running C++ tests...")
 
-	var cmd *exec.Cmd
-
-	// Check for different C++ test setups
-	if _, err := os.Stat("build/tests"); err == nil {
-		// Look for test executables in build directory
-		cmd = exec.Command("find", "build/tests", "-type", "f", "-executable", "-exec", "{}", ";")
-	} else if _, err := os.Stat("CMakeLists.txt"); err == nil {
-		// CMake project - try to run ctest
-		if _, err := exec.LookPath("ctest"); err == nil {
-			cmd = exec.Command("ctest", "--test-dir", "build", "--verbose")
-		} else {
-			app.printWarning("CMake project detected but ctest not found. Building first...")
-			app.buildCMakeProject()
-			cmd = exec.Command("ctest", "--test-dir", "build", "--verbose")
-		}
-	} else if _, err := os.Stat("Makefile"); err == nil {
-		// Makefile project - check for test target
-		cmd = exec.Command("make", "test")
-	} else if _, err := os.Stat("test"); err == nil {
-		// Look for test executables in test directory
-		cmd = exec.Command("find", "test", "-type", "f", "-executable", "-exec", "{}", ";")
-	} else {
-		// Look for any test executables in current directory
-		cmd = exec.Command("find", ".", "-name", "*test*", "-type", "f", "-executable", "-exec", "{}", ";")
-	}
-
-	if cmd == nil {
-		app.printWarning("Could not determine C++ test command. Please build tests first.")
+	// Check if tests directory exists
+	if _, err := os.Stat(app.rules.Paths.TestsDir); os.IsNotExist(err) {
+		app.printError("Tests directory not found. Please generate tests first using option 1.")
 		return
 	}
 
-	app.printInfo("Executing: %s", strings.Join(cmd.Args, " "))
-
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	startTime := time.Now()
-	err := cmd.Run()
-	duration := time.Since(startTime)
-
-	if err != nil {
-		app.printError("Tests failed after %v: %v", duration, err)
-	} else {
-		app.printSuccess("Tests completed successfully in %v", duration)
+	if app.debug {
+		app.printDebug("Looking for tests in: %s", app.rules.Paths.TestsDir)
 	}
+
+	// Run the C++ test workflow using the configured tests directory
+	err := RunCppTestWorkflow(app.rules.Paths.TestsDir)
+	if err != nil {
+		app.printError("Test execution failed: %v", err)
+		return
+	}
+
+	app.printSuccess("✅ Test execution completed successfully!")
 }
 
 func (app *App) runBuild() {

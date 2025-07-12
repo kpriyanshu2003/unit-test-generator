@@ -60,7 +60,7 @@ model_config:
 
 paths:
   codebase_dir: "./codebase"
-  tests_dir: "./tests"
+  tests_dir: "./tests-new"
   temp_dir: "./tmp"
   folders_to_scan:
     - "."
