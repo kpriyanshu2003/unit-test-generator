@@ -25,30 +25,92 @@ func NewTestGenerator(client *api.Client, rules *Rules) *TestGenerator {
 func (tg *TestGenerator) ProcessFiles(files map[string]string) error {
 	log.Printf("Starting to process %d files", len(files))
 
+	// Group files by their base name (without extension)
+	fileGroups := make(map[string]map[string]string)
+
+	for filename, content := range files {
+		// Get base name without extension
+		baseName := strings.TrimSuffix(filename, filepath.Ext(filename))
+
+		// Initialize the group if it doesn't exist
+		if fileGroups[baseName] == nil {
+			fileGroups[baseName] = make(map[string]string)
+		}
+
+		// Add file to its group
+		fileGroups[baseName][filename] = content
+	}
+
+	log.Printf("Grouped files into %d base names", len(fileGroups))
+
 	successCount := 0
 	failureCount := 0
 
-	// Process each file sequentially
-	for filename, content := range files {
-		log.Printf("Processing file: %s", filename)
+	// Process each group
+	for baseName, group := range fileGroups {
+		log.Printf("Processing group: %s", baseName)
 
-		if err := tg.processFile(filename, content); err != nil {
-			log.Printf("Failed to process file %s: %v", filename, err)
+		// Find .cpp/.cc file (implementation)
+		var implFile, implContent string
+		var headerContent string
+
+		for filename, content := range group {
+			if strings.HasSuffix(filename, ".cpp") || strings.HasSuffix(filename, ".cc") {
+				implFile = filename
+				implContent = content
+			} else if strings.HasSuffix(filename, ".h") || strings.HasSuffix(filename, ".hpp") {
+				// headerFile = filename
+				headerContent = content
+			}
+		}
+
+		// Only process if we have an implementation file
+		if implFile == "" {
+			log.Printf("Skipping group %s: no implementation file found", baseName)
+			continue
+		}
+
+		// Combine header and implementation content
+		combinedContent := tg.combineHeaderAndImplementation(headerContent, implContent)
+
+		// Use the implementation file name for generating test filename
+		if err := tg.processFile(implFile, combinedContent); err != nil {
+			log.Printf("Failed to process group %s: %v", baseName, err)
 			failureCount++
 			continue
 		}
 
 		successCount++
-		log.Printf("Successfully processed file: %s", filename)
+		log.Printf("Successfully processed group: %s", baseName)
 	}
 
 	log.Printf("Processing complete. Success: %d, Failures: %d", successCount, failureCount)
 
 	if failureCount > 0 {
-		return fmt.Errorf("failed to process %d out of %d files", failureCount, len(files))
+		return fmt.Errorf("failed to process %d out of %d groups", failureCount, len(fileGroups))
 	}
 
 	return nil
+}
+
+// combineHeaderAndImplementation combines header and implementation content
+func (tg *TestGenerator) combineHeaderAndImplementation(headerContent, implContent string) string {
+	var combined strings.Builder
+
+	// Add header content first (if exists)
+	if headerContent != "" {
+		combined.WriteString("// Header file content:\n")
+		combined.WriteString(headerContent)
+		combined.WriteString("\n\n")
+	}
+
+	// Add implementation content
+	if implContent != "" {
+		combined.WriteString("// Implementation file content:\n")
+		combined.WriteString(implContent)
+	}
+
+	return combined.String()
 }
 
 // processFile processes a single file and generates its test case
@@ -497,14 +559,15 @@ func (tg *TestGenerator) generateTestFilename(sourceFile string) string {
 
 // convertToTestFilename converts a source filename to test filename
 func (tg *TestGenerator) convertToTestFilename(filename string) string {
-	// Generate test filename
-	if strings.HasSuffix(filename, ".cc") {
+	if strings.HasSuffix(filename, ".cpp") {
 		return strings.Replace(filename, ".cpp", "_test.cc", 1)
+	} else if strings.HasSuffix(filename, ".cc") {
+		return strings.Replace(filename, ".cc", "_test.cc", 1)
 	} else if strings.HasSuffix(filename, ".h") {
 		return strings.Replace(filename, ".h", "_test.cc", 1)
+	} else if strings.HasSuffix(filename, ".hpp") {
+		return strings.Replace(filename, ".hpp", "_test.cc", 1)
 	}
-
-	// Default case
 	return filename + "_test.cc"
 }
 

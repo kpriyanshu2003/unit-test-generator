@@ -144,13 +144,6 @@ func (app *App) generateTests() {
 		app.printDebug("Tests directory ready: %s", app.rules.Paths.TestsDir)
 	}
 
-	// Copy header files to tests directory
-	app.printInfo("📄 Copying header files...")
-	if err := CopyHeaderFiles(app.rules.Paths.CodebaseDir, app.rules.Paths.TestsDir, app.rules.Paths.FoldersToScan); err != nil {
-		app.printError("Failed to copy header files: %v", err)
-		return
-	}
-
 	// Generate unit tests
 	generator := NewTestGenerator(app.client, app.rules)
 	startTime := time.Now()
@@ -174,12 +167,19 @@ func (app *App) runTests() {
 		return
 	}
 
-	if app.debug {
-		app.printDebug("Looking for tests in: %s", app.rules.Paths.TestsDir)
+	// Check if source directory exists
+	if _, err := os.Stat(app.rules.Paths.CodebaseDir); os.IsNotExist(err) {
+		app.printError("Source directory not found: %s", app.rules.Paths.CodebaseDir)
+		return
 	}
 
-	// Run the C++ test workflow using the configured tests directory
-	err := RunCppTestWorkflow(app.rules.Paths.TestsDir)
+	if app.debug {
+		app.printDebug("Looking for tests in: %s", app.rules.Paths.TestsDir)
+		app.printDebug("Looking for source files in: %s", app.rules.Paths.CodebaseDir)
+	}
+
+	// Run the C++ test workflow using the configured tests and source directories
+	err := RunCppTestWorkflow(app.rules.Paths.TestsDir, app.rules.Paths.CodebaseDir)
 	if err != nil {
 		app.printError("Test execution failed: %v", err)
 		return

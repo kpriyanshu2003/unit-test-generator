@@ -125,6 +125,33 @@ func ListCppTestFiles(dir string) ([]string, error) {
 	return testFiles, err
 }
 
+// ListSourceFiles finds all C++ source files in the given directory
+func ListSourceFiles(dir string) ([]string, error) {
+	var sourceFiles []string
+
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !info.IsDir() {
+			filename := strings.ToLower(info.Name())
+			if strings.HasSuffix(filename, ".cpp") ||
+				strings.HasSuffix(filename, ".cc") ||
+				strings.HasSuffix(filename, ".c") {
+				// Exclude test files from source files
+				if !strings.Contains(filename, "test") {
+					sourceFiles = append(sourceFiles, path)
+				}
+			}
+		}
+
+		return nil
+	})
+
+	return sourceFiles, err
+}
+
 // SelectTestFile displays test files and allows user to select one
 func SelectTestFile(testFiles []string) (string, error) {
 	if len(testFiles) == 0 {
@@ -153,7 +180,7 @@ func SelectTestFile(testFiles []string) (string, error) {
 }
 
 // CompileAndRunCppTest compiles and runs a C++ test file with Google Test
-func CompileAndRunCppTest(testFile string) error {
+func CompileAndRunCppTest(testFile string, sourceDir string) error {
 	fmt.Printf("🔨 Compiling %s...\n", testFile)
 
 	// Get absolute path to ensure file exists
@@ -162,7 +189,7 @@ func CompileAndRunCppTest(testFile string) error {
 		return fmt.Errorf("failed to get absolute path: %v", err)
 	}
 
-	// Check if file exists
+	// Check if test file exists
 	if _, err := os.Stat(absTestFile); os.IsNotExist(err) {
 		return fmt.Errorf("test file does not exist: %s", absTestFile)
 	}
@@ -195,23 +222,49 @@ func CompileAndRunCppTest(testFile string) error {
 		return fmt.Errorf("Google Test include directory not found: %s", gtestInclude)
 	}
 
-	// Create the compile command with Google Test
+	// Get all source files from the source directory
+	sourceFiles, err := ListSourceFiles(sourceDir)
+	if err != nil {
+		return fmt.Errorf("failed to list source files: %v", err)
+	}
+
+	// Get absolute path for source directory to use as include path
+	absSourceDir, err := filepath.Abs(sourceDir)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path for source directory: %v", err)
+	}
+
+	// Create the compile command with Google Test and source files
 	compileArgs := []string{
 		"-std=c++17",
 		"-I" + gtestInclude,
 		"-I" + gmockInclude,
+		"-I" + absSourceDir, // Add source directory as include path
 		"-pthread",
 		"-o", executableName,
 		absTestFile,
-		gtestLib,
-		gtestMainLib,
 	}
+
+	// Add all source files to compilation
+	for _, sourceFile := range sourceFiles {
+		absSourceFile, err := filepath.Abs(sourceFile)
+		if err != nil {
+			fmt.Printf("⚠️  Warning: Could not get absolute path for %s: %v\n", sourceFile, err)
+			continue
+		}
+		compileArgs = append(compileArgs, absSourceFile)
+	}
+
+	// Add Google Test libraries
+	compileArgs = append(compileArgs, gtestLib, gtestMainLib)
 
 	compileCmd := exec.Command("g++", compileArgs...)
 	compileCmd.Dir = testDir
 
 	fmt.Printf("🔧 Running: g++ %s\n", strings.Join(compileArgs, " "))
 	fmt.Printf("📁 Working directory: %s\n", testDir)
+	fmt.Printf("📂 Including source files from: %s\n", sourceDir)
+	fmt.Printf("📊 Found %d source files to compile\n", len(sourceFiles))
 
 	compileOutput, err := compileCmd.CombinedOutput()
 	if err != nil {
@@ -250,7 +303,7 @@ func CompileAndRunCppTest(testFile string) error {
 }
 
 // RunCppTestWorkflow orchestrates the entire test running process
-func RunCppTestWorkflow(testsDir string) error {
+func RunCppTestWorkflow(testsDir string, sourceDir string) error {
 	// First, ensure Google Test is built
 	if err := CheckAndBuildGoogleTest(); err != nil {
 		return fmt.Errorf("failed to setup Google Test: %v", err)
@@ -268,6 +321,6 @@ func RunCppTestWorkflow(testsDir string) error {
 		return fmt.Errorf("failed to select test file: %v", err)
 	}
 
-	// Compile and run the selected test
-	return CompileAndRunCppTest(selectedFile)
+	// Compile and run the selected test with source files
+	return CompileAndRunCppTest(selectedFile, sourceDir)
 }

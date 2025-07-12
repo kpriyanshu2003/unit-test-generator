@@ -1,23 +1,29 @@
 #include <gtest/gtest.h>
-#include <cmath>
+#include "example.h"
 #include <stdexcept>
+#include <cmath>
 
-TEST(CalculatorTest, AddPositive) {
+TEST(CalculatorTests, addPositive) {
     Calculator calc;
     EXPECT_EQ(calc.add(5, 3), 8);
 }
 
-TEST(CalculatorTest, AddNegative) {
+TEST(CalculatorTests, addNegative) {
     Calculator calc;
-    EXPECT_EQ(calc.add(-2, -1), -3);
+    EXPECT_EQ(calc.add(-5, -3), -8);
 }
 
-TEST(CalculatorTest, SubtractPositive) {
+TEST(CalculatorTests, subtractPositive) {
     Calculator calc;
     EXPECT_EQ(calc.subtract(10, 4), 6);
 }
 
-TEST(CalculatorTest, SubtractNegative) {
+TEST(CalculatorTests, subtractNegative) {
     Calculator calc;
-    EXPECT_EQ(calc.subtract(-5, -8), 3);
+    EXPECT_EQ(calc.subtract(-10, -4), -6);
+}
+
+int main(int argc, char **argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
 }
