@@ -1,0 +1,8 @@
+---------------------
+Code Coverage Summary
+---------------------
+Total lines:    4
+Covered lines:  4
+Coverage:       100.00%
+Uncovered lines: 0
+---------------------

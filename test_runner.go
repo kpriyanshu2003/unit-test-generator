@@ -179,72 +179,214 @@ func SelectTestFile(testFiles []string) (string, error) {
 	return testFiles[index-1], nil
 }
 
-// CompileAndRunCppTest compiles and runs a C++ test file with Google Test
-func CompileAndRunCppTest(testFile string, sourceDir string) error {
-	fmt.Printf("🔨 Compiling %s...\n", testFile)
+// GenerateCoverageSummary captures coverage and produces a command-line summary report.
+func GenerateCoverageSummary(testDir string, sourceDir string) error {
+	fmt.Println("📊 Generating coverage summary...")
 
-	// Get absolute path to ensure file exists
-	absTestFile, err := filepath.Abs(testFile)
-	if err != nil {
-		return fmt.Errorf("failed to get absolute path: %v", err)
+	// --- Step 1: Capture coverage data using a robust lcov command ---
+	rawInfoFile := filepath.Join(testDir, "coverage.raw.info")
+	projectRoot, _ := filepath.Abs(".")
+
+	// Define patterns to exclude from the very beginning.
+	excludePatterns := []string{
+		filepath.Join(projectRoot, "external", "*"),  // Exclude Google Test
+		filepath.Join(projectRoot, "tests-new", "*"), // Exclude the test files themselves
+		"/usr/include/*",        // Exclude system headers (Linux)
+		"/Applications/*",       // Exclude Xcode/macOS system headers
+		"*/Library/Developer/*", // Exclude macOS developer tools headers
 	}
 
-	// Check if test file exists
+	// Build the lcov command arguments
+	lcovArgs := []string{
+		"--capture",
+		"--directory", testDir,
+		"--output-file", rawInfoFile,
+		"--ignore-errors", "unsupported,inconsistent,unused",
+	}
+	for _, p := range excludePatterns {
+		lcovArgs = append(lcovArgs, "--exclude", p)
+	}
+
+	captureCmd := exec.Command("lcov", lcovArgs...)
+	if output, err := captureCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("lcov capture failed: %v\nOutput: %s", err, string(output))
+	}
+
+	fmt.Println("   [1/2] Raw coverage data collected and filtered.")
+
+	// --- Step 2: Manually parse the raw info file to calculate coverage ---
+	file, err := os.Open(rawInfoFile)
+	if err != nil {
+		fmt.Println("⚠️  No coverage data was generated for the source files. This may be because they were fully excluded or the source directory is incorrect.")
+		return nil
+	}
+	defer file.Close()
+
+	totalLines := 0
+	coveredLines := 0
+	var currentFile string
+	isSourceFile := false
+
+	absSourceDir, _ := filepath.Abs(sourceDir)
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "SF:") {
+			currentFile = strings.TrimPrefix(line, "SF:")
+			isSourceFile = strings.HasPrefix(currentFile, absSourceDir)
+		}
+		if isSourceFile && strings.HasPrefix(line, "DA:") {
+			parts := strings.Split(strings.TrimPrefix(line, "DA:"), ",")
+			if len(parts) == 2 {
+				totalLines++
+				hitCount, err := strconv.Atoi(parts[1])
+				if err == nil && hitCount > 0 {
+					coveredLines++
+				}
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("error reading coverage file: %v", err)
+	}
+
+	// Clean up the temporary raw info file immediately after parsing
+	os.Remove(rawInfoFile)
+
+	fmt.Println("   [2/2] Coverage data parsed.")
+
+	// --- Step 3: Format the summary and save it to a file ---
+	var summaryContent string
+	if totalLines == 0 {
+		summaryContent = `
+---------------------
+Code Coverage Summary
+---------------------
+⚠️  No executable lines were found for the source files.
+   Please check if the 'source_directory' argument is correct.
+---------------------
+`
+	} else {
+		var coveragePercentage float64 = (float64(coveredLines) / float64(totalLines)) * 100
+		summaryContent = fmt.Sprintf(`
+---------------------
+Code Coverage Summary
+---------------------
+Total lines:    %d
+Covered lines:  %d
+Coverage:       %.2f%%
+Uncovered lines: %d
+---------------------
+`, totalLines, coveredLines, coveragePercentage, totalLines-coveredLines)
+	}
+
+	// Print the summary to the console
+	fmt.Print(summaryContent)
+
+	// Define the path for the output file
+	coverageDir := filepath.Join(testDir, "coverage")
+	if err := os.MkdirAll(coverageDir, 0755); err != nil {
+		return fmt.Errorf("could not create coverage directory: %v", err)
+	}
+	summaryFilePath := filepath.Join(coverageDir, "coverage_summary.txt")
+
+	// Write the summary to the file
+	if err := os.WriteFile(summaryFilePath, []byte(strings.TrimSpace(summaryContent)), 0644); err != nil {
+		return fmt.Errorf("failed to write summary file: %v", err)
+	}
+
+	fmt.Printf("\n✅ Summary saved to: %s\n", summaryFilePath)
+
+	return nil
+}
+
+// CleanupTestDirectory removes all intermediate files generated during compilation and testing.
+func CleanupTestDirectory(testDir string, executableName string) {
+	fmt.Println("🧹 Cleaning up intermediate files...")
+
+	// Patterns for files to remove
+	patterns := []string{
+		filepath.Join(testDir, "*.gcno"),
+		filepath.Join(testDir, "*.gcda"),
+		filepath.Join(testDir, executableName),
+	}
+
+	for _, pattern := range patterns {
+		files, err := filepath.Glob(pattern)
+		if err == nil {
+			for _, file := range files {
+				os.Remove(file)
+			}
+		}
+	}
+
+	// Also clean up .dSYM directories on macOS
+	dsymPattern := filepath.Join(testDir, "*.dSYM")
+	dsymFiles, err := filepath.Glob(dsymPattern)
+	if err == nil {
+		for _, dsymFile := range dsymFiles {
+			os.RemoveAll(dsymFile)
+		}
+	}
+}
+
+// CompileAndRunCppTest compiles and runs a C++ test, then generates a coverage report.
+func CompileAndRunCppTest(testFile string, sourceDir string) error {
+	fmt.Printf("🔨 Compiling %s with coverage...\n", testFile)
+
+	absTestFile, err := filepath.Abs(testFile)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path for test file: %v", err)
+	}
 	if _, err := os.Stat(absTestFile); os.IsNotExist(err) {
 		return fmt.Errorf("test file does not exist: %s", absTestFile)
 	}
 
-	// Extract filename without extension for executable name
 	baseFile := strings.TrimSuffix(filepath.Base(testFile), filepath.Ext(testFile))
 	executableName := baseFile + "_executable"
-
-	// Get the directory where we'll run the compilation
 	testDir := filepath.Dir(absTestFile)
 
-	// Get the project root directory
+	// Clean up from any previous runs before we start
+	CleanupTestDirectory(testDir, executableName)
+
 	projectRoot, err := filepath.Abs(".")
 	if err != nil {
 		return fmt.Errorf("failed to get project root: %v", err)
 	}
 
-	// Define Google Test paths
+	// Google Test paths
 	gtestInclude := filepath.Join(projectRoot, "external", "googletest", "googletest", "include")
 	gmockInclude := filepath.Join(projectRoot, "external", "googletest", "googlemock", "include")
-
-	// Find Google Test libraries
 	gtestLib, gtestMainLib, err := FindGoogleTestLibraries()
 	if err != nil {
 		return fmt.Errorf("failed to find Google Test libraries: %v", err)
 	}
 
-	// Check if Google Test directories exist
-	if _, err := os.Stat(gtestInclude); os.IsNotExist(err) {
-		return fmt.Errorf("Google Test include directory not found: %s", gtestInclude)
-	}
-
-	// Get all source files from the source directory
+	// Source files
 	sourceFiles, err := ListSourceFiles(sourceDir)
 	if err != nil {
 		return fmt.Errorf("failed to list source files: %v", err)
 	}
-
-	// Get absolute path for source directory to use as include path
 	absSourceDir, err := filepath.Abs(sourceDir)
 	if err != nil {
 		return fmt.Errorf("failed to get absolute path for source directory: %v", err)
 	}
 
-	// Create the compile command with Google Test and source files
+	// --- Compile Command ---
 	compileArgs := []string{
 		"-std=c++17",
+		"-g",
+		"-O0",        // No optimization for accurate line numbers
+		"--coverage", // This flag combines -fprofile-arcs and -ftest-coverage
 		"-I" + gtestInclude,
 		"-I" + gmockInclude,
-		"-I" + absSourceDir, // Add source directory as include path
+		"-I" + absSourceDir,
 		"-pthread",
 		"-o", executableName,
 		absTestFile,
 	}
-
 	// Add all source files to compilation
 	for _, sourceFile := range sourceFiles {
 		absSourceFile, err := filepath.Abs(sourceFile)
@@ -254,55 +396,45 @@ func CompileAndRunCppTest(testFile string, sourceDir string) error {
 		}
 		compileArgs = append(compileArgs, absSourceFile)
 	}
-
-	// Add Google Test libraries
 	compileArgs = append(compileArgs, gtestLib, gtestMainLib)
 
 	compileCmd := exec.Command("g++", compileArgs...)
-	compileCmd.Dir = testDir
-
-	fmt.Printf("🔧 Running: g++ %s\n", strings.Join(compileArgs, " "))
-	fmt.Printf("📁 Working directory: %s\n", testDir)
-	fmt.Printf("📂 Including source files from: %s\n", sourceDir)
-	fmt.Printf("📊 Found %d source files to compile\n", len(sourceFiles))
+	compileCmd.Dir = testDir // Run compilation in the test directory
 
 	compileOutput, err := compileCmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("❌ Compilation failed:\n%s\n", string(compileOutput))
 		return fmt.Errorf("compilation failed: %v", err)
 	}
-
 	fmt.Println("✅ Compilation successful!")
 
-	// Check if executable was created
-	executablePath := filepath.Join(testDir, executableName)
-	if _, err := os.Stat(executablePath); os.IsNotExist(err) {
-		return fmt.Errorf("executable was not created: %s", executablePath)
-	}
-
-	// Run the compiled test
+	// --- Run Test Executable ---
 	fmt.Printf("🚀 Running tests from %s...\n", testFile)
-
-	runCmd := exec.Command("./" + executableName)
+	executablePath := filepath.Join(testDir, executableName)
+	runCmd := exec.Command(executablePath)
 	runCmd.Dir = testDir
 
-	runOutput, err := runCmd.CombinedOutput()
+	runOutput, runErr := runCmd.CombinedOutput()
 	fmt.Printf("📊 Test output:\n%s\n", string(runOutput))
 
-	// Clean up executable
-	cleanupCmd := exec.Command("rm", executableName)
-	cleanupCmd.Dir = testDir
-	cleanupCmd.Run() // Ignore cleanup errors
-
-	if err != nil {
-		return fmt.Errorf("test execution failed: %v", err)
+	// --- Generate Report ---
+	// Only generate report if tests ran (even if they failed)
+	if coverageErr := GenerateCoverageSummary(testDir, sourceDir); coverageErr != nil {
+		fmt.Printf("⚠️  Coverage summary generation failed: %v\n", coverageErr)
 	}
 
-	fmt.Println("✅ Tests completed!")
+	// --- Final Cleanup ---
+	CleanupTestDirectory(testDir, executableName)
+
+	if runErr != nil {
+		return fmt.Errorf("test execution failed: %v", runErr)
+	}
+
+	fmt.Println("✅ Tests and coverage generation completed!")
 	return nil
 }
 
-// RunCppTestWorkflow orchestrates the entire test running process
+// RunCppTestWorkflow orchestrates the entire test running process with coverage
 func RunCppTestWorkflow(testsDir string, sourceDir string) error {
 	// First, ensure Google Test is built
 	if err := CheckAndBuildGoogleTest(); err != nil {
@@ -321,6 +453,6 @@ func RunCppTestWorkflow(testsDir string, sourceDir string) error {
 		return fmt.Errorf("failed to select test file: %v", err)
 	}
 
-	// Compile and run the selected test with source files
+	// Compile and run the selected test with source files and coverage
 	return CompileAndRunCppTest(selectedFile, sourceDir)
 }
