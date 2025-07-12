@@ -56,9 +56,17 @@ func ReadCodebase(dir string, toScan []string) (map[string]string, error) {
 			return nil
 		}
 
-		// Check if the first directory in the path matches any of the folders to scan
-		firstDir := pathParts[0]
-		if !foldersToScan[firstDir] {
+		// Determine the folder to check
+		var folderToCheck string
+		if len(pathParts) == 1 {
+			// File is directly in the root directory
+			folderToCheck = "."
+		} else {
+			// File is in a subdirectory, check the first directory
+			folderToCheck = pathParts[0]
+		}
+
+		if !foldersToScan[folderToCheck] {
 			// Skip this file as it's not in a folder we want to scan
 			return nil
 		}
@@ -75,7 +83,6 @@ func ReadCodebase(dir string, toScan []string) (map[string]string, error) {
 
 		filesContent[relativePath] = string(content)
 		log.Printf("Successfully read file %s (%d bytes)", relativePath, len(content))
-
 		return nil
 	})
 

@@ -9,5 +9,6 @@
   "go.alternateTools": {
     "go": "/Users/kpriyanshu2003/.local/share/mise/shims/go",
     "gopls": "/Users/kpriyanshu2003/.local/share/mise/shims/gopls"
-  }
+  },
+  "python.defaultInterpreterPath": "/Users/kpriyanshu2003/.local/share/mise/installs/python/3.12.11/bin/python"
 }

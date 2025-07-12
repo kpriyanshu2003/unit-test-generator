@@ -59,10 +59,8 @@ model_config:
   timeout_minutes: 10
 
 paths:
-  codebase_dir: "./orgChartApi"
+  codebase_dir: "./codebase"
   tests_dir: "./tests"
   temp_dir: "./tmp"
   folders_to_scan:
-    # - "controllers"
-    - "models"
-    - "utils"
+    - "."
