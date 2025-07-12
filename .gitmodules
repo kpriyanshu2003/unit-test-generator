@@ -1,3 +1,6 @@
 [submodule "orgChartApi"]
 	path = orgChartApi
 	url = https://github.com/keploy/orgChartApi.git
+[submodule "external/googletest"]
+	path = external/googletest
+	url = https://github.com/google/googletest.git
